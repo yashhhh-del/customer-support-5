@@ -167,6 +167,105 @@ class SimpleAIAgent:
 # Initialize AI Agent
 ai_agent = SimpleAIAgent()
 
+def detect_faq_columns(df: pd.DataFrame) -> tuple:
+    """
+    Detect if a DataFrame contains FAQ data
+    Returns: (is_faq: bool, columns: dict)
+    """
+    columns_lower = {col: col.lower().strip() for col in df.columns}
+    
+    # Possible question column names
+    question_patterns = ['question', 'q', 'query', 'faq', 'questions', 'ask']
+    # Possible answer column names
+    answer_patterns = ['answer', 'a', 'response', 'reply', 'answers', 'solution']
+    # Optional columns
+    category_patterns = ['category', 'type', 'topic', 'group']
+    language_patterns = ['language', 'lang', 'locale']
+    
+    question_col = None
+    answer_col = None
+    category_col = None
+    language_col = None
+    
+    # Find question column
+    for col, col_lower in columns_lower.items():
+        if any(pattern in col_lower for pattern in question_patterns):
+            question_col = col
+            break
+    
+    # Find answer column
+    for col, col_lower in columns_lower.items():
+        if any(pattern in col_lower for pattern in answer_patterns):
+            answer_col = col
+            break
+    
+    # Find optional category column
+    for col, col_lower in columns_lower.items():
+        if any(pattern in col_lower for pattern in category_patterns):
+            category_col = col
+            break
+    
+    # Find optional language column
+    for col, col_lower in columns_lower.items():
+        if any(pattern in col_lower for pattern in language_patterns):
+            language_col = col
+            break
+    
+    # Check if we found both required columns
+    is_faq = question_col is not None and answer_col is not None
+    
+    columns = {}
+    if is_faq:
+        columns = {
+            'question': question_col,
+            'answer': answer_col,
+            'category': category_col,
+            'language': language_col
+        }
+    
+    return is_faq, columns
+
+def import_faqs_from_sheet(df: pd.DataFrame, columns: dict, source_file: str, sheet_name: str):
+    """Import FAQs from a DataFrame into the knowledge base"""
+    imported_count = 0
+    
+    for idx, row in df.iterrows():
+        question = row[columns['question']]
+        answer = row[columns['answer']]
+        
+        # Skip empty rows
+        if pd.isna(question) or pd.isna(answer):
+            continue
+        
+        # Get optional fields
+        category = row[columns['category']] if columns.get('category') and columns['category'] in df.columns else 'General'
+        language = row[columns['language']] if columns.get('language') and columns['language'] in df.columns else 'English'
+        
+        # Handle NaN values
+        if pd.isna(category):
+            category = 'General'
+        if pd.isna(language):
+            language = 'English'
+        
+        # Create unique FAQ ID
+        faq_id = f"FAQ-{str(uuid.uuid4())[:8]}"
+        
+        # Add to knowledge base
+        st.session_state.knowledge_base[faq_id] = {
+            'type': 'faq',
+            'question': str(question).strip(),
+            'answer': str(answer).strip(),
+            'category': str(category).strip(),
+            'language': str(language).strip(),
+            'source_file': source_file,
+            'source_sheet': sheet_name,
+            'uploaded_at': datetime.now()
+        }
+        
+        imported_count += 1
+    
+    return imported_count
+
 # Sidebar Navigation
 st.sidebar.title("🤖 AI Support Agent")
 page = st.sidebar.radio(
@@ -888,104 +987,6 @@ elif page == "📚 Knowledge Base":
                 - Supports multiple sheets with different FAQ sets
                 """)
 
-def detect_faq_columns(df: pd.DataFrame) -> tuple:
-    """
-    Detect if a DataFrame contains FAQ data
-    Returns: (is_faq: bool, columns: dict)
-    """
-    columns_lower = {col: col.lower().strip() for col in df.columns}
-    
-    # Possible question column names
-    question_patterns = ['question', 'q', 'query', 'faq', 'questions', 'ask']
-    # Possible answer column names
-    answer_patterns = ['answer', 'a', 'response', 'reply', 'answers', 'solution']
-    # Optional columns
-    category_patterns = ['category', 'type', 'topic', 'group']
-    language_patterns = ['language', 'lang', 'locale']
-    
-    question_col = None
-    answer_col = None
-    category_col = None
-    language_col = None
-    
-    # Find question column
-    for col, col_lower in columns_lower.items():
-        if any(pattern in col_lower for pattern in question_patterns):
-            question_col = col
-            break
-    
-    # Find answer column
-    for col, col_lower in columns_lower.items():
-        if any(pattern in col_lower for pattern in answer_patterns):
-            answer_col = col
-            break
-    
-    # Find optional category column
-    for col, col_lower in columns_lower.items():
-        if any(pattern in col_lower for pattern in category_patterns):
-            category_col = col
-            break
-    
-    # Find optional language column
-    for col, col_lower in columns_lower.items():
-        if any(pattern in col_lower for pattern in language_patterns):
-            language_col = col
-            break
-    
-    # Check if we found both required columns
-    is_faq = question_col is not None and answer_col is not None
-    
-    columns = {}
-    if is_faq:
-        columns = {
-            'question': question_col,
-            'answer': answer_col,
-            'category': category_col,
-            'language': language_col
-        }
-    
-    return is_faq, columns
-
-def import_faqs_from_sheet(df: pd.DataFrame, columns: dict, source_file: str, sheet_name: str):
-    """Import FAQs from a DataFrame into the knowledge base"""
-    imported_count = 0
-    
-    for idx, row in df.iterrows():
-        question = row[columns['question']]
-        answer = row[columns['answer']]
-        
-        # Skip empty rows
-        if pd.isna(question) or pd.isna(answer):
-            continue
-        
-        # Get optional fields
-        category = row[columns['category']] if columns.get('category') and columns['category'] in df.columns else 'General'
-        language = row[columns['language']] if columns.get('language') and columns['language'] in df.columns else 'English'
-        
-        # Handle NaN values
-        if pd.isna(category):
-            category = 'General'
-        if pd.isna(language):
-            language = 'English'
-        
-        # Create unique FAQ ID
-        faq_id = f"FAQ-{str(uuid.uuid4())[:8]}"
-        
-        # Add to knowledge base
-        st.session_state.knowledge_base[faq_id] = {
-            'type': 'faq',
-            'question': str(question).strip(),
-            'answer': str(answer).strip(),
-            'category': str(category).strip(),
-            'language': str(language).strip(),
-            'source_file': source_file,
-            'source_sheet': sheet_name,
-            'uploaded_at': datetime.now()
-        }
-        
-        imported_count += 1
-    
-    return imported_count
         
         with col2:
             st.write("**🌐 Add Website URL**")
