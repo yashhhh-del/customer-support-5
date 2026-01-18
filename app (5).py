@@ -107,17 +107,15 @@ def show_dataset_upload_help():
         - query_date
         """)
 
-# Load dataset
-@st.cache_data
+# Load dataset (not cached to allow dynamic loading from session state)
 def load_data():
+    """Load data from session state or file paths"""
     try:
-        # Check if dataset is uploaded in session
-        if 'dataset_path' in st.session_state and st.session_state['dataset_path']:
-            df = pd.read_excel(st.session_state['dataset_path'])
-            df['query_date'] = pd.to_datetime(df['query_date'])
-            return df
+        # First priority: Check if dataset is uploaded in session state
+        if 'uploaded_dataframe' in st.session_state:
+            return st.session_state['uploaded_dataframe'].copy()
         
-        # Try multiple possible paths
+        # Try multiple possible paths for default file
         paths = [
             'Few_Data_set.xlsx',
             '/mnt/user-data/uploads/Few_Data_set.xlsx',
@@ -129,13 +127,12 @@ def load_data():
                 df = pd.read_excel(path)
                 df['query_date'] = pd.to_datetime(df['query_date'])
                 return df
-            except:
+            except Exception:
                 continue
         
         # If no file found, return empty dataframe
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error loading data: {e}")
         return pd.DataFrame()
 
 # Simple AI Response Generator (Mock)
@@ -317,20 +314,28 @@ st.sidebar.subheader("📊 Dataset")
 uploaded_dataset = st.sidebar.file_uploader(
     "Upload Few_Data_set.xlsx",
     type=['xlsx', 'xls'],
-    help="Upload your dataset file to enable analytics"
+    help="Upload your dataset file to enable analytics",
+    key="dataset_uploader"
 )
 
 if uploaded_dataset:
     try:
-        # Save uploaded file temporarily
-        import tempfile
-        import os
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-            tmp_file.write(uploaded_dataset.read())
-            st.session_state['dataset_path'] = tmp_file.name
-        st.sidebar.success("✅ Dataset loaded!")
+        # Clear cache when new file is uploaded
+        if 'last_uploaded_file' not in st.session_state or st.session_state['last_uploaded_file'] != uploaded_dataset.name:
+            st.cache_data.clear()
+            st.session_state['last_uploaded_file'] = uploaded_dataset.name
+        
+        # Save uploaded file to session state directly as DataFrame
+        import pandas as pd
+        df_uploaded = pd.read_excel(uploaded_dataset)
+        df_uploaded['query_date'] = pd.to_datetime(df_uploaded['query_date'])
+        st.session_state['uploaded_dataframe'] = df_uploaded
+        
+        st.sidebar.success(f"✅ Dataset loaded! ({len(df_uploaded)} rows)")
     except Exception as e:
-        st.sidebar.error(f"Error loading dataset: {e}")
+        st.sidebar.error(f"❌ Error loading dataset: {e}")
+        if 'uploaded_dataframe' in st.session_state:
+            del st.session_state['uploaded_dataframe']
 
 st.sidebar.divider()
 page = st.sidebar.radio(
