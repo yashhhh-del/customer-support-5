@@ -70,10 +70,53 @@ if 'tickets' not in st.session_state:
 if 'knowledge_base' not in st.session_state:
     st.session_state.knowledge_base = {}
 
+def show_dataset_upload_help():
+    """Show helpful message when dataset is not loaded"""
+    st.error("📊 Dataset Not Found!")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.markdown("""
+        ### 📤 How to Upload Dataset:
+        
+        1. **Look at the LEFT SIDEBAR** ⬅️
+        2. Find the **"📊 Dataset"** section
+        3. Click **"Browse files"** button
+        4. Select **Few_Data_set.xlsx**
+        5. Click **Open**
+        
+        ✅ Dashboard will load automatically!
+        """)
+    
+    with col2:
+        st.markdown("""
+        ### 📋 Dataset Requirements:
+        
+        **File Name:** `Few_Data_set.xlsx`
+        
+        **Required Columns:**
+        - record_id
+        - business_unit  
+        - customer_query
+        - query_category
+        - language
+        - communication_channel
+        - ai_response
+        - ticket_created
+        - query_date
+        """)
+
 # Load dataset
 @st.cache_data
 def load_data():
     try:
+        # Check if dataset is uploaded in session
+        if 'dataset_path' in st.session_state and st.session_state['dataset_path']:
+            df = pd.read_excel(st.session_state['dataset_path'])
+            df['query_date'] = pd.to_datetime(df['query_date'])
+            return df
+        
         # Try multiple possible paths
         paths = [
             'Few_Data_set.xlsx',
@@ -90,7 +133,6 @@ def load_data():
                 continue
         
         # If no file found, return empty dataframe
-        st.error("Dataset file not found. Please upload Few_Data_set.xlsx")
         return pd.DataFrame()
     except Exception as e:
         st.error(f"Error loading data: {e}")
@@ -268,6 +310,29 @@ def import_faqs_from_sheet(df: pd.DataFrame, columns: dict, source_file: str, sh
 
 # Sidebar Navigation
 st.sidebar.title("🤖 AI Support Agent")
+
+# Dataset Upload in Sidebar
+st.sidebar.divider()
+st.sidebar.subheader("📊 Dataset")
+uploaded_dataset = st.sidebar.file_uploader(
+    "Upload Few_Data_set.xlsx",
+    type=['xlsx', 'xls'],
+    help="Upload your dataset file to enable analytics"
+)
+
+if uploaded_dataset:
+    try:
+        # Save uploaded file temporarily
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            tmp_file.write(uploaded_dataset.read())
+            st.session_state['dataset_path'] = tmp_file.name
+        st.sidebar.success("✅ Dataset loaded!")
+    except Exception as e:
+        st.sidebar.error(f"Error loading dataset: {e}")
+
+st.sidebar.divider()
 page = st.sidebar.radio(
     "Navigation",
     ["🏠 Dashboard", "💬 Chat Support", "📊 Analytics", "🎫 Tickets", "📚 Knowledge Base", "⚙️ Settings"]
@@ -279,7 +344,9 @@ if page == "🏠 Dashboard":
     
     df = load_data()
     
-    if not df.empty:
+    if df.empty:
+        show_dataset_upload_help()
+    else:
         # Date filter
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -518,7 +585,10 @@ elif page == "📊 Analytics":
     
     df = load_data()
     
-    if not df.empty:
+    if df.empty:
+        st.warning("⚠️ No data available. Please upload the dataset file from the sidebar.")
+        st.info("Upload **Few_Data_set.xlsx** in the sidebar to view analytics.")
+    else:
         # Filters
         st.subheader("🔍 Filters")
         col1, col2, col3, col4 = st.columns(4)
